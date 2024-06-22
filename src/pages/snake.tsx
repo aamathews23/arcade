@@ -1,22 +1,9 @@
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
-
-type DirectionType = 'up' | 'down' | 'left' | 'right' | 'none';
-type SnakeNode = {
-  x: number;
-  y: number;
-  direction: DirectionType;
-  lastMove: number;
-};
-type Move = {
-  direction: DirectionType;
-  timestamp: number;
-};
+import type { DirectionType, Point } from '~/types/snake';
+import { move } from '~/utils/snake';
 
 /**
- * TODO: Add logic to extend snake and prevent food from spawning on snake path.
- * TODO: Create a snake with 3 nodes to test movement. Remove snake grow logic for now. Remember that the head and a single body node should change direction each update frame. Not all nodes. All other nodes should move in same direction.
- * TODO: Update queue data structure. Each node manages its own queue?
  * TODO: Add logic to end game when snake reach end or hits itself.
  * TODO: Add logic to play again on game over.
  * TODO: Refactor snake game logic to hook.
@@ -34,17 +21,8 @@ export default function Snake() {
   const [isGameActive, setIsGameActive] = useState(false);
   const [score, setScore] = useState(0);
   const [direction, setDirection] = useState<DirectionType>('none');
-  const [snakeHead, setSnakeHead] = useState<SnakeNode>({
-    x: 0,
-    y: 0,
-    direction: 'none',
-    lastMove: 0,
-  });
-  const [snakeBody, setSnakeBody] = useState<SnakeNode[]>([]);
-  const [foodX, setFoodX] = useState(spawnFood());
-  const [foodY, setFoodY] = useState(spawnFood());
-  const [moveQueue, setMoveQueue] = useState<Move[]>([]);
-  const [moveTimestamp, setMoveTimestamp] = useState<number>();
+  const [snake, setSnake] = useState<Point[]>([{ x: 0, y: 0 }]);
+  const [food, setFood] = useState<Point>({ x: spawnFood(), y: spawnFood() });
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -53,13 +31,6 @@ export default function Snake() {
   }, []);
 
   useEffect(() => {
-    const updateMoveQueue = (direction: DirectionType) => {
-      const queue = moveQueue.slice();
-      const timestamp = performance.now();
-      queue.push({ direction, timestamp });
-      setMoveTimestamp(timestamp);
-      setMoveQueue(queue);
-    };
     const handleKeyDown = (e: KeyboardEvent) => {
       const { key } = e;
       if (key === ' ') {
@@ -68,23 +39,27 @@ export default function Snake() {
         switch (key.toLowerCase()) {
           case 'w':
           case 'arrowup':
-            setDirection('up');
-            updateMoveQueue('up');
+            if (direction !== 'down') {
+              setDirection('up');
+            }
             break;
           case 's':
           case 'arrowdown':
-            setDirection('down');
-            updateMoveQueue('down');
+            if (direction !== 'up') {
+              setDirection('down');
+            }
             break;
           case 'd':
           case 'arrowright':
-            setDirection('right');
-            updateMoveQueue('right');
+            if (direction !== 'left') {
+              setDirection('right');
+            }
             break;
           case 'a':
           case 'arrowleft':
-            setDirection('left');
-            updateMoveQueue('left');
+            if (direction !== 'right') {
+              setDirection('left');
+            }
             break;
           default:
             break;
@@ -97,7 +72,7 @@ export default function Snake() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isGameActive, moveQueue]);
+  }, [isGameActive, direction]);
 
   useEffect(() => {
     if (isGameActive) {
@@ -120,192 +95,33 @@ export default function Snake() {
 
         canvasCtx.clearRect(0, 0, 512, 512);
         canvasCtx.beginPath();
-        canvasCtx.rect(snakeHead.x, snakeHead.y, 16, 16);
-        for (const snakeNode of snakeBody) {
-          canvasCtx.rect(snakeNode.x, snakeNode.y, 16, 16);
+        for (const node of snake) {
+          canvasCtx.rect(node.x, node.y, 16, 16);
         }
         canvasCtx.fillStyle = '#f8fafc';
         canvasCtx.fill();
 
         canvasCtx.fillStyle = '#fca5a5';
-        canvasCtx.fillRect(foodX, foodY, 16, 16);
+        canvasCtx.fillRect(food.x, food.y, 16, 16);
 
         if (timestamp - last >= 110) {
-          // evaluate first element in moveQueue, if move has not been made update the node's direction. compare direction and moveTimestamp
-          const queue = moveQueue.slice();
-          const move = queue.shift();
+          const head = snake[0];
 
-          if (snakeHead.lastMove !== moveTimestamp) {
-            switch (move?.direction) {
-              case 'up':
-                setSnakeHead({
-                  ...snakeHead,
-                  y: snakeHead.y - 16,
-                  direction: move?.direction,
-                  lastMove: move?.timestamp,
-                });
-                break;
-              case 'down':
-                setSnakeHead({
-                  ...snakeHead,
-                  y: snakeHead.y + 16,
-                  direction: move?.direction,
-                  lastMove: move?.timestamp,
-                });
-                break;
-              case 'right':
-                setSnakeHead({
-                  ...snakeHead,
-                  x: snakeHead.x + 16,
-                  direction: move?.direction,
-                  lastMove: move?.timestamp,
-                });
-                break;
-              case 'left':
-                setSnakeHead({
-                  ...snakeHead,
-                  x: snakeHead.x - 16,
-                  direction: move?.direction,
-                  lastMove: move?.timestamp,
-                });
-                break;
-              default:
-                break;
-            }
-          } else {
-            switch (snakeHead.direction) {
-              case 'up':
-                setSnakeHead({
-                  ...snakeHead,
-                  y: snakeHead.y - 16,
-                });
-                break;
-              case 'down':
-                setSnakeHead({
-                  ...snakeHead,
-                  y: snakeHead.y + 16,
-                });
-                break;
-              case 'right':
-                setSnakeHead({
-                  ...snakeHead,
-                  x: snakeHead.x + 16,
-                });
-                break;
-              case 'left':
-                setSnakeHead({
-                  ...snakeHead,
-                  x: snakeHead.x - 16,
-                });
-                break;
-              default:
-                break;
-            }
+          if (head) {
+            const newHead = move(head, direction);
+            const newSnake = snake.slice();
+            newSnake.pop();
+            newSnake.unshift(newHead);
+            setSnake(newSnake);
           }
 
-          for (let snakeNodeIdx = 0; snakeNodeIdx < snakeBody.length; snakeNodeIdx++) {
-            const snakeNode = snakeBody[snakeNodeIdx];
-            let node: SnakeNode = {
-              x: 0,
-              y: 0,
-              direction: 'none',
-              lastMove: 0,
-            };
-            if (snakeNode && snakeNode.lastMove !== moveTimestamp) {
-              switch (move?.direction) {
-                case 'up':
-                  node = {
-                    ...snakeNode,
-                    y: snakeNode.y - 16,
-                    direction: move?.direction,
-                    lastMove: move?.timestamp,
-                  };
-                  break;
-                case 'down':
-                  node = {
-                    ...snakeNode,
-                    y: snakeNode.y + 16,
-                    direction: move?.direction,
-                    lastMove: move?.timestamp,
-                  };
-                  break;
-                case 'right':
-                  node = {
-                    ...snakeNode,
-                    x: snakeNode.x + 16,
-                    direction: move?.direction,
-                    lastMove: move?.timestamp,
-                  };
-                  break;
-                case 'left':
-                  node = {
-                    ...snakeNode,
-                    x: snakeNode.x - 16,
-                    direction: move?.direction,
-                    lastMove: move?.timestamp,
-                  };
-                  break;
-                default:
-                  break;
-              }
-              const body = snakeBody.slice();
-              body.splice(snakeNodeIdx, 1, node);
-              setSnakeBody(body);
-            } else {
-              if (snakeNode) {
-                switch (snakeNode.direction) {
-                  case 'up':
-                    node = {
-                      ...snakeNode,
-                      y: snakeNode.y - 16,
-                    };
-                    break;
-                  case 'down':
-                    node = {
-                      ...snakeNode,
-                      y: snakeNode.y + 16,
-                    };
-                    break;
-                  case 'right':
-                    node = {
-                      ...snakeNode,
-                      x: snakeNode.x + 16,
-                    };
-                    break;
-                  case 'left':
-                    node = {
-                      ...snakeNode,
-                      x: snakeNode.x - 16,
-                    };
-                    break;
-                  default:
-                    break;
-                }
-                const body = snakeBody.slice();
-                body.splice(snakeNodeIdx, 1, node);
-                setSnakeBody(body);
-              }
-            }
-          }
-          console.log(snakeBody);
-          setMoveQueue(queue);
-
-          if (snakeHead.x === foodX && snakeHead.y === foodY) {
+          if (head && head.x === food.x && head.y === food.y) {
             setScore(score + 1);
-            setFoodX(spawnFood());
-            setFoodY(spawnFood());
+            setFood({ x: spawnFood(), y: spawnFood() });
 
-            if (snakeBody.length === 0) {
-              setSnakeBody([
-                ...snakeBody,
-                {
-                  x: snakeHead.x + 16,
-                  y: snakeHead.y,
-                  direction: snakeHead.direction,
-                  lastMove: snakeHead.lastMove,
-                },
-              ]);
-            }
+            const newSnake = snake.slice();
+            newSnake.push({ x: head.x, y: head.y });
+            setSnake(newSnake);
           }
 
           last = timestamp;
@@ -316,18 +132,7 @@ export default function Snake() {
 
       return cancelAnimation;
     }
-  }, [
-    isGameActive,
-    direction,
-    canvasCtx,
-    snakeHead,
-    snakeBody,
-    foodX,
-    foodY,
-    score,
-    moveQueue,
-    moveTimestamp,
-  ]);
+  }, [isGameActive, direction, canvasCtx, snake, food, score]);
 
   return (
     <>

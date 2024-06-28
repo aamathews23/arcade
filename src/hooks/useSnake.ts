@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { type Point } from '~/types/snake';
 import { useCanvas } from './useCanvas';
 import { useGame } from './useGame';
@@ -9,11 +9,12 @@ const CELL_SIZE = 16;
 
 export const useSnake = () => {
   const { canvasRef, canvas } = useCanvas();
-  const { score, direction, isGameActive, isGameOver, gameOver, updateScore, resetGame } = useGame({
-    allowBackwardsMove: false,
-  });
-  const [snake, setSnake] = useState<Point[]>([{ x: 0, y: 0 }]);
-  const [food, setFood] = useState<Point>(spawnFood(snake));
+  const { score, highScore, direction, message, isGameActive, isGameOver, gameOver, updateScore } =
+    useGame({
+      allowBackwardsMove: false,
+    });
+  const snake = useRef<Point[]>([{ x: 0, y: 0 }]);
+  const food = useRef<Point>(spawnFood(snake.current));
 
   useEffect(() => {
     let requestId: number;
@@ -23,12 +24,35 @@ export const useSnake = () => {
         cancelAnimationFrame(requestId);
       }
     };
-    if (isGameOver) {
-      cancelAnimation();
-      setSnake([{ x: 0, y: 0 }]);
-      setFood(spawnFood(snake));
-      resetGame();
-    }
+
+    const endGame = () => {
+      snake.current = [{ x: 0, y: 0 }];
+      food.current = spawnFood(snake.current);
+    };
+
+    const checkSnakeCollision = (snake: Point[]) => {
+      const head = snake[0];
+      const endBound = CANVAS_SIZE - CELL_SIZE;
+      let collision = false;
+      if (head) {
+        if (head.x < 0 || head.x > endBound || head.y < 0 || head.y > endBound) {
+          collision = true;
+        }
+
+        if (!collision) {
+          for (let i = 1; i < snake.length; i++) {
+            const node = snake[i];
+            if (node && head.x === node.x && head.y === node.y) {
+              collision = true;
+              break;
+            }
+          }
+        }
+      }
+
+      return collision;
+    };
+
     if (isGameActive) {
       let last = performance.now();
 
@@ -41,47 +65,39 @@ export const useSnake = () => {
 
           canvas.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
           canvas.beginPath();
-          for (const node of snake) {
+
+          for (const node of snake.current) {
             canvas.rect(node.x, node.y, CELL_SIZE, CELL_SIZE);
           }
+
           canvas.fillStyle = '#f8fafc';
           canvas.fill();
 
           if (food) {
             canvas.fillStyle = '#fca5a5';
-            canvas.fillRect(food.x, food.y, CELL_SIZE, CELL_SIZE);
+            canvas.fillRect(food.current.x, food.current.y, CELL_SIZE, CELL_SIZE);
           }
 
           if (timestamp - last >= 60) {
-            const head = snake[0];
+            const head = snake.current[0];
 
             if (head && food) {
-              const newHead = move(head, direction);
-              const newSnake = snake.slice();
-              newSnake.pop();
-              newSnake.unshift(newHead);
-              setSnake(newSnake);
-              const endBound = CANVAS_SIZE - CELL_SIZE;
-              if (head.x < 0 || head.x > endBound || head.y < 0 || head.y > endBound) {
-                gameOver();
-              }
-
-              for (let i = 1; i < snake.length; i++) {
-                const node = snake[i];
-                if (node && head.x === node.x && head.y === node.y) {
-                  gameOver();
-                  break;
-                }
-              }
-
-              if (head.x === food.x && head.y === food.y) {
+              if (checkSnakeCollision(snake.current)) {
+                gameOver(endGame);
+              } else if (head.x === food.current.x && head.y === food.current.y) {
                 updateScore(score + 1);
-                setFood(spawnFood(snake));
+                food.current = spawnFood(snake.current);
 
-                const newSnake = snake.slice();
-                const node = move(head, direction);
+                const newSnake = snake.current.slice();
+                const node = move(head, direction.current);
                 newSnake.unshift(node);
-                setSnake(newSnake);
+                snake.current = newSnake;
+              } else {
+                const newHead = move(head, direction.current);
+                const newSnake = snake.current.slice();
+                newSnake.pop();
+                newSnake.unshift(newHead);
+                snake.current = newSnake;
               }
             }
 
@@ -94,27 +110,12 @@ export const useSnake = () => {
         return cancelAnimation;
       }
     }
-  }, [
-    canvas,
-    direction,
-    food,
-    snake,
-    score,
-    isGameActive,
-    isGameOver,
-    gameOver,
-    updateScore,
-    resetGame,
-  ]);
-
-  const message = isGameActive
-    ? `Score: ${score}`
-    : isGameOver
-      ? 'Game over. Press Enter to play again.'
-      : 'Press Enter to play.';
+  }, [canvas, direction, food, snake, score, isGameActive, isGameOver, gameOver, updateScore]);
 
   return {
     canvas: canvasRef,
+    score,
+    highScore,
     message,
   };
 };

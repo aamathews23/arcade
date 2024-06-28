@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type DirectionType } from '~/types/snake';
 
 export type UseGameOpts = {
@@ -6,76 +6,93 @@ export type UseGameOpts = {
 };
 
 export const useGame = ({ allowBackwardsMove = true }: UseGameOpts = {}) => {
-  const [direction, setDirection] = useState<DirectionType>('none');
-  const [isGameActive, setIsGameActive] = useState(false);
+  const direction = useRef<DirectionType>('none');
+  const [isGameActive, setIsGameActive] = useState(true);
   const [isGameOver, setIsGameOver] = useState(false);
   const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(score);
 
   const resetGame = () => {
-    setDirection('none');
-    setIsGameActive(false);
+    direction.current = 'none';
+    setIsGameActive(true);
     setIsGameOver(false);
     setScore(0);
   };
 
-  const gameOver = () => {
+  const gameOver = (callback?: () => void) => {
     setIsGameActive(false);
     setIsGameOver(true);
+    if (score > highScore) {
+      setHighScore(score);
+    }
+    if (callback) {
+      callback();
+    }
   };
 
   const updateScore = (newScore: number) => setScore(newScore);
+
+  const message = isGameOver
+    ? 'Game over. Press Enter to play again'
+    : isGameActive
+      ? 'Press Enter to pause.'
+      : 'Press Enter to play.';
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { key } = e;
       if (key === 'Enter') {
-        if (!isGameOver) {
+        if (isGameOver) {
+          resetGame();
+        } else {
           setIsGameActive(!isGameActive);
         }
       } else {
-        switch (key.toLowerCase()) {
-          case 'w':
-          case 'arrowup':
-            if (allowBackwardsMove) {
-              setDirection('up');
-            } else {
-              if (direction !== 'down') {
-                setDirection('up');
+        if (isGameActive) {
+          switch (key.toLowerCase()) {
+            case 'w':
+            case 'arrowup':
+              if (allowBackwardsMove) {
+                direction.current = 'up';
+              } else {
+                if (direction.current !== 'down') {
+                  direction.current = 'up';
+                }
               }
-            }
-            break;
-          case 's':
-          case 'arrowdown':
-            if (allowBackwardsMove) {
-              setDirection('down');
-            } else {
-              if (direction !== 'up') {
-                setDirection('down');
+              break;
+            case 's':
+            case 'arrowdown':
+              if (allowBackwardsMove) {
+                direction.current = 'down';
+              } else {
+                if (direction.current !== 'up') {
+                  direction.current = 'down';
+                }
               }
-            }
-            break;
-          case 'd':
-          case 'arrowright':
-            if (allowBackwardsMove) {
-              setDirection('right');
-            } else {
-              if (direction !== 'left') {
-                setDirection('right');
+              break;
+            case 'd':
+            case 'arrowright':
+              if (allowBackwardsMove) {
+                direction.current = 'right';
+              } else {
+                if (direction.current !== 'left') {
+                  direction.current = 'right';
+                }
               }
-            }
-            break;
-          case 'a':
-          case 'arrowleft':
-            if (allowBackwardsMove) {
-              setDirection('left');
-            } else {
-              if (direction !== 'right') {
-                setDirection('left');
+              break;
+            case 'a':
+            case 'arrowleft':
+              if (allowBackwardsMove) {
+                direction.current = 'left';
+              } else {
+                if (direction.current !== 'right') {
+                  direction.current = 'left';
+                }
               }
-            }
-            break;
-          default:
-            break;
+              break;
+            default:
+              break;
+          }
         }
       }
     };
@@ -85,11 +102,13 @@ export const useGame = ({ allowBackwardsMove = true }: UseGameOpts = {}) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [direction, allowBackwardsMove, isGameActive, isGameOver]);
+  }, [allowBackwardsMove, isGameActive, isGameOver]);
 
   return {
     direction,
     score,
+    highScore,
+    message,
     isGameActive,
     isGameOver,
     gameOver,

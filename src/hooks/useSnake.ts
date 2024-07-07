@@ -3,15 +3,17 @@ import { type Point } from '~/types/snake';
 import { useCanvas } from './useCanvas';
 import { useGame } from './useGame';
 import { spawnFood, move } from '~/utils/snake';
+import { type CommonOpts } from '~/types/common';
 
 const CANVAS_SIZE = 512;
 const CELL_SIZE = 16;
 
-export const useSnake = () => {
+export const useSnake = (opts: CommonOpts) => {
   const { canvasRef, canvas } = useCanvas();
   const { score, highScore, direction, message, isGameActive, isGameOver, gameOver, updateScore } =
-    useGame({
+    useGame('snake', {
       allowBackwardsMove: false,
+      ...opts,
     });
   const snake = useRef<Point[]>([{ x: 0, y: 0 }]);
   const food = useRef<Point>(spawnFood(snake.current));

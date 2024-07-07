@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import { api } from '~/utils/api';
+import { type CommonOpts } from '~/types/common';
 import { type DirectionType } from '~/types/snake';
 
-export type UseGameOpts = {
+export interface UseGameOpts extends CommonOpts {
   allowBackwardsMove?: boolean;
-};
+}
 
-export const useGame = ({ allowBackwardsMove = true }: UseGameOpts = {}) => {
+export const useGame = (
+  gameName: string,
+  { allowBackwardsMove = true, user = undefined, userHighScore = 0 }: UseGameOpts = {},
+) => {
   const direction = useRef<DirectionType>('none');
   const [isGameActive, setIsGameActive] = useState(true);
   const [isGameOver, setIsGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(score);
+  const [highScore, setHighScore] = useState(userHighScore);
+  const { mutate } = api.game.setHighScoreForUserByGameId.useMutation();
 
   const resetGame = () => {
     direction.current = 'none';
@@ -24,6 +30,9 @@ export const useGame = ({ allowBackwardsMove = true }: UseGameOpts = {}) => {
     setIsGameOver(true);
     if (score > highScore) {
       setHighScore(score);
+      if (user) {
+        mutate({ gameName, userId: user.id, highScore: score });
+      }
     }
     if (callback) {
       callback();

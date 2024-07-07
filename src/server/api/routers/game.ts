@@ -45,11 +45,24 @@ export const gameRouter = createTRPCRouter({
       });
     }),
   setHighScoreForUserByGameId: protectedProcedure
-    .input(z.object({ highScore: z.number(), gameId: z.number(), userId: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .input(z.object({ highScore: z.number(), gameName: z.string(), userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const game = await ctx.db.game.findFirst({
+        select: {
+          id: true,
+        },
+        where: {
+          name: input.gameName,
+        },
+      });
+
+      if (!game) {
+        return;
+      }
+
       return ctx.db.userGame.upsert({
         create: {
-          gameId: input.gameId,
+          gameId: game.id,
           userId: input.userId,
           highScore: input.highScore,
         },
@@ -58,7 +71,7 @@ export const gameRouter = createTRPCRouter({
         },
         where: {
           userId_gameId: {
-            gameId: input.gameId,
+            gameId: game.id,
             userId: input.userId,
           },
         },
